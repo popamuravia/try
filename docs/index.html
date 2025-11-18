@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎓 StudentNotify</title>
+    <style>
+        /* ВСТАВЬТЕ СЮДА ВЕСЬ CSS ИЗ style.css */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root { --primary: #4361ee; --primary-dark: #3a56d4; /* и т.д. */ }
+        /* ... весь ваш CSS код ... */
+    </style>
+</head>
+<body>
+    <!-- 🔐 ФОРМА ВХОДА -->
+    <div id="login-form" class="login-container">
+        <!-- ваша HTML разметка -->
+    </div>
+
+    <!-- 🏠 ОСНОВНОЙ ИНТЕРФЕЙС -->
+    <div id="main-interface" class="hidden">
+        <!-- ваша HTML разметка -->
+    </div>
+
+    <script>
+        // ВСТАВЬТЕ СЮДА ВЕСЬ JavaScript КОД ИЗ app.js
+        console.log('🚀 StudentNotify Static Version');
+        
+        let currentUser = null;
+        let authToken = null;
+        
+        // 📁 Хранилище в localStorage
+        class LocalStorage {
+            constructor(key) {
+                this.key = key;
+            }
+            
+            read() {
+                const data = localStorage.getItem(this.key);
+                if (data) {
+                    return JSON.parse(data);
+                }
+                
+                // Данные по умолчанию
+                if (this.key === 'notifications') {
+                    const defaultData = {
+                        notifications: [
+                            {
+                                id: 1,
+                                title: "Добро пожаловать в StudentNotify!",
+                                content: "Это демо-версия системы уведомлений. Все данные хранятся в вашем браузере.",
+                                author: "admin",
+                                created_at: new Date().toISOString(),
+                                is_important: true,
+                                tags: ["приветствие", "информация"]
+                            },
+                            {
+                                id: 2,
+                                title: "Тестовое уведомление",
+                                content: "Вы можете создавать и удалять уведомления. Данные сохранятся в вашем браузере.",
+                                author: "admin",
+                                created_at: new Date().toISOString(),
+                                is_important: false,
+                                tags: ["тест"]
+                            }
+                        ],
+                        next_id: 3
+                    };
+                    this.write(defaultData);
+                    return defaultData;
+                }
+                
+                if (this.key === 'users') {
+                    const defaultData = {
+                        users: [
+                            {
+                                id: 1,
+                                login: "admin",
+                                password: "admin", // в реальном проекте нужно хешировать!
+                                role: "admin",
+                                name: "Администратор"
+                            },
+                            {
+                                id: 2,
+                                login: "student", 
+                                password: "student",
+                                role: "student",
+                                name: "Иван Петров",
+                                group: "ПИ-21"
+                            }
+                        ]
+                    };
+                    this.write(defaultData);
+                    return defaultData;
+                }
+                
+                return {};
+            }
+            
+            write(data) {
+                localStorage.setItem(this.key, JSON.stringify(data));
+            }
+        }
+
+        // 🔐 СИСТЕМА АВТОРИЗАЦИИ
+        async function login() {
+            const loginValue = document.getElementById('login').value.trim();
+            const passwordValue = document.getElementById('password').value.trim();
+            
+            if (!loginValue || !passwordValue) {
+                alert('❌ Пожалуйста, заполните все поля');
+                return;
+            }
+            
+            try {
+                const usersStorage = new LocalStorage('users');
+                const usersData = usersStorage.read();
+                const user = usersData.users.find(u => u.login === loginValue && u.password === passwordValue);
+                
+                if (user) {
+                    // Успешный вход
+                    currentUser = {
+                        id: user.id,
+                        login: user.login,
+                        role: user.role,
+                        name: user.name,
+                        group: user.group
+                    };
+                    
+                    authToken = 'static-token-' + Date.now();
+                    
+                    localStorage.setItem('authToken', authToken);
+                    localStorage.setItem('currentUser', JSON.stringify(currentUser));
+                    
+                    showMainInterface();
+                    loadNotifications();
+                    
+                    alert('✅ Вход успешен!');
+                } else {
+                    throw new Error('Неверный логин или пароль');
+                }
+                
+            } catch (error) {
+                alert('Ошибка входа: ' + error.message);
+            }
+        }
+
+        // 📢 СИСТЕМА УВЕДОМЛЕНИЙ (адаптированная)
+        function loadNotifications() {
+            try {
+                const storage = new LocalStorage('notifications');
+                const data = storage.read();
+                displayNotifications(data.notifications || []);
+            } catch (error) {
+                console.error('Ошибка загрузки:', error);
+            }
+        }
+
+        function displayNotifications(notifications) {
+            const container = document.getElementById('notifications-container');
+            
+            if (!notifications || notifications.length === 0) {
+                container.innerHTML = '<div class="empty-state">📭 Уведомлений пока нет</div>';
+                return;
+            }
+            
+            const isAdmin = currentUser && currentUser.role === 'admin';
+            
+            container.innerHTML = notifications.map(notification => `
+                <div class="notification-card ${notification.is_important ? 'important' : ''}">
+                    <div class="notification-header">
+                        <h3>${notification.title}</h3>
+                        ${notification.is_important ? '<span class="badge">❗ Важно</span>' : ''}
+                    </div>
+                    <div class="notification-content">${notification.content}</div>
+                    <div class="notification-meta">
+                        <span>👤 ${notification.author}</span>
+                        <span>📅 ${new Date(notification.created_at).toLocaleString()}</span>
+                        ${isAdmin ? `<button onclick="deleteNotification(${notification.id})">🗑️ Удалить</button>` : ''}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function createNotification() {
+            if (!currentUser || currentUser.role !== 'admin') {
+                alert('❌ Требуются права администратора');
+                return;
+            }
+            
+            const title = document.getElementById('notification-title').value.trim();
+            const content = document.getElementById('notification-content').value.trim();
+            const is_important = document.getElementById('notification-important').checked;
+            
+            if (!title || !content) {
+                alert('❌ Заполните заголовок и содержание');
+                return;
+            }
+            
+            try {
+                const storage = new LocalStorage('notifications');
+                const data = storage.read();
+                
+                const newNotification = {
+                    id: data.next_id++,
+                    title,
+                    content,
+                    author: currentUser.login,
+                    created_at: new Date().toISOString(),
+                    is_important,
+                    tags: ['общее']
+                };
+                
+                data.notifications.push(newNotification);
+                storage.write(data);
+                
+                // Очищаем форму
+                document.getElementById('notification-title').value = '';
+                document.getElementById('notification-content').value = '';
+                document.getElementById('notification-important').checked = false;
+                
+                loadNotifications();
+                alert('✅ Уведомление создано!');
+                
+            } catch (error) {
+                alert('Ошибка: ' + error.message);
+            }
+        }
+
+        function deleteNotification(id) {
+            if (!confirm('Удалить уведомление?')) return;
+            
+            const storage = new LocalStorage('notifications');
+            const data = storage.read();
+            
+            data.notifications = data.notifications.filter(n => n.id !== id);
+            storage.write(data);
+            
+            loadNotifications();
+            alert('✅ Уведомление удалено!');
+        }
+
+        // 🎨 УПРАВЛЕНИЕ ИНТЕРФЕЙСОМ
+        function showMainInterface() {
+            document.getElementById('login-form').classList.add('hidden');
+            document.getElementById('main-interface').classList.remove('hidden');
+            
+            const userInfo = document.getElementById('user-info');
+            const roleIcon = currentUser.role === 'admin' ? '👨‍💼' : '👨‍🎓';
+            userInfo.textContent = `${roleIcon} ${currentUser.name}`;
+            
+            if (currentUser.role === 'admin') {
+                document.getElementById('admin-panel').classList.remove('hidden');
+            }
+            
+            loadNotifications();
+        }
+
+        function showLoginForm() {
+            document.getElementById('login-form').classList.remove('hidden');
+            document.getElementById('main-interface').classList.add('hidden');
+        }
+
+        function logout() {
+            currentUser = null;
+            authToken = null;
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('currentUser');
+            showLoginForm();
+        }
+
+        function checkAuth() {
+            const savedToken = localStorage.getItem('authToken');
+            const savedUser = localStorage.getItem('currentUser');
+            
+            if (savedToken && savedUser) {
+                authToken = savedToken;
+                currentUser = JSON.parse(savedUser);
+                showMainInterface();
+            } else {
+                showLoginForm();
+            }
+        }
+
+        // 🚀 ИНИЦИАЛИЗАЦИЯ
+        document.addEventListener('DOMContentLoaded', function() {
+            // Обработчики Enter
+            document.getElementById('login')?.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') login();
+            });
+            
+            document.getElementById('password')?.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') login();
+            });
+            
+            checkAuth();
+        });
+
+        // Глобальные функции
+        window.login = login;
+        window.logout = logout;
+        window.createNotification = createNotification;
+        window.deleteNotification = deleteNotification;
+    </script>
+</body>
+</html>
